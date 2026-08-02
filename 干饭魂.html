@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="format-detection" content="telephone=no">
+<title>家庭菜单管家 V1.5</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        primary: '#e63946',
+        secondary: '#f8f9fa',
+        dark: '#1d3557',
+        light: '#f1faee',
+        accent: '#457b9d',
+        success: '#22c55e',
+        warning: '#f59e0b'
+      },
+      fontFamily: { sans: ['-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'] }
+    }
+  }
+}
+</script>
+<style type="text/tailwindcss">
+@layer utilities {
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+  .touch-btn { min-height: 44px; min-width: 44px; display:flex; align-items:center; justify-content:center; }
+  .safe-bottom { padding-bottom: max(12px, env(safe-area-inset-bottom)); }
+  .safe-top { padding-top: env(safe-area-inset-top); }
+  .step-line { border-left: 2px solid #e5e7eb; }
+  .tag { display:inline-block; background:#457b9d15; color:#457b9d; padding:2px 8px; border-radius:12px; font-size:12px; margin-right:4px; margin-bottom:4px; }
+  .print-card { background:white; border-radius:12px; box-shadow:0 1px 3px rgba(0,0,0,0.1); padding:16px; margin-bottom:16px; }
+  @media print {
+    body { background:white !important; color:black !important; font-size:12pt; }
+    .no-print { display:none !important; }
+    .print-card { page-break-inside:avoid; box-shadow:none !important; border:1px solid #ddd; width:100%; }
+    input, textarea, select { border:1px solid #ccc !important; }
+    @page { size:A4; margin:1cm; }
+  }
+}
+</style>
+</head>
+<body class="bg-gray-50 text-dark min-h-screen overflow-x-hidden font-sans">
+
+<header id="header" class="relative h-[200px] md:h-[260px] flex items-center justify-center bg-cover bg-center safe-top" style="background-image: url('https://picsum.photos/id/292/1920/600');">
+  <div class="absolute inset-0 bg-black/40"></div>
+  <div class="relative z-10 text-center text-white px-4">
+    <div class="text-3xl md:text-5xl mb-2">🍽</div>
+    <h1 id="familyName" class="text-xl md:text-4xl font-bold mb-1">张家小厨房</h1>
+    <p class="text-base md:text-xl">今晚吃什么？</p>
+    <div class="flex gap-2 justify-center mt-3 flex-wrap">
+      <button id="editHeaderBtn" class="px-3 py-2 bg-white/20 hover:bg-white/30 rounded-full text-sm backdrop-blur transition-all touch-btn no-print">
+        <i class="fa fa-pencil mr-1"></i> 设置
+      </button>
+      <button id="backupBtn" class="px-3 py-2 bg-white/20 hover:bg-white/30 rounded-full text-sm backdrop-blur transition-all touch-btn no-print">
+        <i class="fa fa-download mr-1"></i> 备份
+      </button>
+      <button id="printAllBtn" class="px-3 py-2 bg-white/20 hover:bg-white/30 rounded-full text-sm backdrop-blur transition-all touch-btn no-print">
+        <i class="fa fa-print mr-1"></i> 打印菜谱
+      </button>
+    </div>
+  </div>
+</header>
+
+<section class="container mx-auto px-3 -mt-5 relative z-20 no-print">
+  <div class="bg-white rounded-xl shadow-sm p-4 mb-4">
+    <div class="flex gap-2 flex-wrap mb-2">
+      <div class="flex-1 min-w-[200px]">
+        <input type="text" id="searchInput" placeholder="🔎 搜食材 / 预算(如≤30) / 标签(烤箱/快手)" 
+          class="w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30">
+      </div>
+      <button id="searchBtn" class="px-4 py-2 bg-primary text-white rounded-lg touch-btn">
+        <i class="fa fa-search"></i> 搜索
+      </button>
+      <button id="resetSearchBtn" class="px-3 py-2 bg-gray-100 rounded-lg touch-btn">重置</button>
+    </div>
+    <div id="searchTip" class="text-xs text-gray-500">
+      💡 示例：<span class="text-primary">鸡蛋 番茄</span> 搜食材 · <span class="text-primary">≤30</span> 预算内 · <span class="text-primary">烤箱 快手</span> 按做法搜
+    </div>
+    <div id="searchInfo" class="mt-2 text-sm text-gray-600 hidden flex justify-between items-center">
+      <span>找到 <span id="searchResultCount">0</span> 道菜</span>
+      <button id="clearSearchLink" class="text-primary hover:underline text-sm">清除筛选</button>
+    </div>
+  </div>
+</section>
+
+<main class="container mx-auto px-3 py-3 pb-28">
+  <div class="flex flex-col gap-4">
+    <div class="md:hidden overflow-x-auto scrollbar-hide -mx-3 px-3 no-print">
+      <ul id="mobileCategory" class="flex gap-2 whitespace-nowrap pb-1">
+        <li class="category-item active px-4 py-2 cursor-pointer bg-primary/10 text-primary font-medium rounded-full flex-shrink-0" data-category="all"><i class="fa fa-star mr-1"></i> 全部</li>
+      </ul>
+    </div>
+    <div class="flex flex-col md:flex-row gap-4">
+      <aside class="hidden md:block md:w-56 flex-shrink-0 no-print">
+        <div class="bg-white rounded-xl shadow-sm overflow-hidden sticky top-4">
+          <div class="p-4 border-b border-gray-100"><h3 class="font-bold text-lg">菜品分类</h3></div>
+          <ul id="categoryList" class="divide-y divide-gray-100"></ul>
+          <div class="px-5 py-4 space-y-2">
+            <button id="addDishBtn" class="w-full py-2 bg-primary text-white rounded-lg hover:bg-primary/90 touch-btn"><i class="fa fa-plus mr-1"></i> 添加新菜</button>
+            <button id="shareTableBtn" class="w-full py-2 bg-accent text-white rounded-lg hover:bg-accent/90 touch-btn"><i class="fa fa-share-alt mr-1"></i> 共享餐桌</button>
+          </div>
+        </div>
+      </aside>
+      <div class="flex-1">
+        <div id="dishGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+        <div id="emptyTip" class="hidden text-center py-16 text-gray-400">
+          <div class="text-4xl mb-3">🍳</div>
+          <p class="text-lg mb-4">没有找到菜品</p>
+          <button class="px-5 py-2 bg-primary text-white rounded-lg touch-btn" onclick="addDish()">去添加第一道菜</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-100 p-3 safe-bottom z-30 no-print">
+  <div class="flex gap-3">
+    <button id="mobileAddBtn" class="flex-1 py-3 bg-primary text-white rounded-lg font-medium touch-btn"><i class="fa fa-plus mr-1"></i> 添加新菜</button>
+    <button id="mobileShareBtn" class="flex-1 py-3 bg-accent text-white rounded-lg font-medium touch-btn"><i class="fa fa-share-alt mr-1"></i> 共享餐桌</button>
+  </div>
+</div>
+
+<div id="selectedBar" class="fixed bottom-[76px] md:bottom-0 left-0 right-0 bg-white shadow-[0_-4px_20px_rgba(0,0,0,0.08)] py-2 px-4 transform translate-y-full transition-transform z-40 safe-bottom no-print">
+  <div class="container mx-auto flex items-center justify-between gap-2">
+    <div class="flex items-center flex-1 min-w-0">
+      <span class="text-xl mr-2">🛒</span>
+      <div>
+        <div class="font-medium text-sm"><span id="selectedCount">0</span> 道菜已选</div>
+        <div id="selectedList" class="text-xs text-gray-500 truncate">暂无选择</div>
+      </div>
+    </div>
+    <button id="viewMenuBtn" class="px-3 py-2 bg-primary text-white rounded-lg touch-btn whitespace-nowrap">查看菜单</button>
+  </div>
+</div>
+
+<div id="modalContainer" class="fixed inset-0 bg-black/50 z-50 hidden flex items-end md:items-center justify-center no-print" onclick="if(event.target===this)closeModal()">
+  <div id="modalContent" class="bg-white rounded-t-2xl md:rounded-2xl w-full max-w-[650px] max-h-[90vh] overflow-y-auto"></div>
+</div>
+
+<script>
+// ========== 存储键 ==========
+const STORAGE_KEYS = {
+  DISHES: 'familyMenu_dishes',
+  SETTINGS: 'familyMenu_settings',
+  SELECTED: 'familyMenu_selected',
+  TABLES: 'familyMenu_tables',
+  CURRENT_TABLE: 'familyMenu_currentTable',
+  CATS: 'familyMenu_cats'
+};
+
+// ========== 初始数据 ==========
+const defaultDishes = [{
+  id: 'd1', name: '红烧肉', category: 'meat', desc: '妈妈拿手家常菜', stars: 5,
+  tags: ['炖锅', '家常', '下饭菜'],
+  materials: [{name:'五花肉',amount:'500g',price:35},{name:'冰糖',amount:'30g',price:3},{name:'葱',amount:'2根',price:1},{name:'姜',amount:'1块',price:1}],
+  steps: [{text:'五花肉切块冷水下锅焯水去血沫'},{text:'锅中放少许油，小火炒出糖色'},{text:'放入肉块翻炒均匀裹上糖色'},{text:'加葱姜调料和开水没过肉，小火炖40分钟大火收汁'}],
+  creator:'我', createTime: Date.now()
+}];
+const defaultCats = [
+  {id:'meat',name:'肉类'},{id:'seafood',name:'海鲜'},{id:'vegetable',name:'蔬菜'},
+  {id:'soup',name:'汤品'},{id:'staple',name:'主食'}
+];
+
+// ========== 全局状态 ==========
+let appState = {
+  dishes: JSON.parse(localStorage.getItem(STORAGE_KEYS.DISHES)) || defaultDishes,
+  selected: [],
+  tables: JSON.parse(localStorage.getItem(STORAGE_KEYS.TABLES)) || [],
+  currentTableId: null,
+  currentCategory: 'all',
+  searchQuery: '',
+  minBudget: null,
+  maxBudget: null,
+  settings: JSON.parse(localStorage.getItem(STORAGE_KEYS.SETTINGS)) || {familyName:'张家小厨房',bgImage:'https://picsum.photos/id/292/1920/600',userName:'我'},
+  categories: JSON.parse(localStorage.getItem(STORAGE_KEYS.CATS)) || defaultCats
+};
+
+// ========== ✅ 解析共享链接（哈希格式，GitHub Pages完美支持）==========
+function parseShareLink(){
+  let hash = location.hash.slice(1).trim();
+  if(hash.startsWith('?')) hash = hash.slice(1);
+  const params = new URLSearchParams(hash);
+  const tableId = params.get('table');
+  
+  if(tableId){
+    appState.currentTableId = tableId;
+    localStorage.setItem(STORAGE_KEYS.CURRENT_TABLE, tableId);
+    let table = appState.tables.find(t=>t.id === tableId);
+    if(!table){
+      table = {id:tableId,name:'共享餐桌',selected:[],createTime:Date.now()};
+      appState.tables.push(table);
+    }
+    document.title = table.name + ' - 家庭菜单管家';
+    appState.selected = table.selected || [];
+  } else {
+    appState.currentTableId = localStorage.getItem(STORAGE_KEYS.CURRENT_TABLE) || null;
+    appState.selected = JSON.parse(localStorage.getItem(STORAGE_KEYS.SELECTED)) || [];
+  }
+}
+
+// ========== 保存数据 ==========
+function saveData(){
+  localStorage.setItem(STORAGE_KEYS.DISHES, JSON.stringify(appState.dishes));
+  localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(appState.settings));
+  localStorage.setItem(STORAGE_KEYS.CATS, JSON.stringify(appState.categories));
+  if(!appState.currentTableId){
+    localStorage.setItem(STORAGE_KEYS.SELECTED, JSON.stringify(appState.selected));
+  }else{
+    const t = appState.tables.find(x=>x.id === appState.currentTableId);
+    if(t) t.selected = appState.selected;
+  }
+  localStorage.setItem(STORAGE_KEYS.TABLES, JSON.stringify(appState.tables));
+}
+
+// ========== 工具函数 ==========
+function showModal(c){ document.getElementById('modalContent').innerHTML=c; document.getElementById('modalContainer').classList.remove('hidden'); document.body.style.overflow='hidden'; }
+function closeModal(){ document.getElementById('modalContainer').classList.add('hidden'); document.body.style.overflow=''; }
+function stars(n){ return '⭐'.repeat(n||4)+'☆'.repeat(5-(n||4)); }
+function calcDishCost(dish){ return (dish.materials||[]).reduce((s,m)=>s+(Number(m.price)||0),0); }
+function splitSteps(text){
+  if(!text?.trim())return [];
+  return text.replace(/[。；;]/g,'|').replace(/(\d+[.、．])/g,'|$1').replace(/(第[一二三四五六七八九十百]+[步、])/g,'|$1').split('|').map(s=>s.trim()).filter(s=>s.length>2);
+}
+function parseRecipeText(raw){
+  const t=raw.trim();
+  const nameMatch=t.match(/(?:菜名|名称|菜品|【菜名】)[:：：]\s*([^\n\r【】#]+)/i)||t.match(/^[^\n\r#【]{2,25}/);
+  const descMatch=t.match(/(?:简介|描述|特点|小贴士)[:：：]\s*([^\n\r【】]+)/i);
+  const imgMatch=t.match(/(https?:\/\/[^)\s]+\.(jpg|jpeg|png|webp|gif))/i);
+  let ingreBlock='';
+  const ingreHead=t.match(/(?:食材|用料|准备|配料|原料)[:：：]\s*([\s\S]*?)(?=\n\s*(?:做法|步骤|教程|小贴士|$))/i);
+  if(ingreHead) ingreBlock=ingreHead[1];
+  else {const p=t.split(/做法|步骤|教程|小贴士/i); ingreBlock=p[0]||'';}
+  const amountUnits = /(\d+(?:\.\d+)?)\s*(克|g|千克|kg|斤|两|毫升|ml|勺|碗|根|片|个|只|块|适量|少许|一把|一撮)/gi;
+  const priceUnits = /[¥￥]?\s*(\d+(?:\.\d+)?)\s*(元|块|钱)?/gi;
+  const materials = [];
+  ingreBlock.split('\n').map(l=>l.trim()).filter(l=>l.length>1).forEach(line=>{
+    let name=line, amount='适量', price=0;
+    const am = [...line.matchAll(amountUnits)];
+    if(am.length){ amount = am.map(x=>x[0]).join(''); name = name.replace(am[0][0],''); }
+    const pm = [...line.matchAll(priceUnits)];
+    if(pm.length){ price = parseFloat(pm[pm.length-1][1])||0; name = name.replace(pm[pm.length-1][0],''); }
+    name = name.replace(/[：:、•·•]/g,'').trim();
+    if(name) materials.push({name,amount,price});
+  });
+  let stepBlock='';
+  const stepHead=t.match(/(?:做法|步骤|教程|过程)[:：：]\s*([\s\S]*)/i);
+  if(stepHead) stepBlock=stepHead[1];
+  else stepBlock=t;
+  const steps = splitSteps(stepBlock).map(s=>({text:s,img:'',video:''}));
+  return {
+    name: nameMatch?.[1]?.trim()||'新菜品',
+    desc: descMatch?.[1]?.trim()||'来自分享的美味',
+    image: imgMatch?.[1]||'https://picsum.photos/id/488/400/300',
+    materials, steps
+  };
+}
+
+// ========== ✅ 综合搜索：食材 + 预算 + 标签/电器 ==========
+function parseSearchQuery(q){
+  let keywords = [];
+  let minBudget = null;
+  let maxBudget = null;
+  const budgetPatterns = [
+    /^[≤＜]=?\s*(\d+(?:\.\d+)?)$/i,
+    /^[≥＞]=?\s*(\d+(?:\.\d+)?)$/i,
+    /^(\d+(?:\.\d+)?)\s*[-~至]\s*(\d+(?:\.\d+)?)$/i,
+    /^(\d+(?:\.\d+)?)$/i
+  ];
+  const tokens = q.split(/\s+/).filter(t=>t.trim());
+  tokens.forEach(t=>{
+    let matched=false;
+    for(let p of budgetPatterns){
+      const m = t.match(p);
+      if(m){
+        if(p===budgetPatterns[0]) maxBudget=parseFloat(m[1]);
+        else if(p===budgetPatterns[1]) minBudget=parseFloat(m[1]);
+        else if(p===budgetPatterns[2]){ minBudget=parseFloat(m[1]); maxBudget=parseFloat(m[2]); }
+        else if(p===budgetPatterns[3]){ maxBudget=parseFloat(m[1]); }
+        matched=true; break;
+      }
+    }
+    if(!matched && t.length>0) keywords.push(t.toLowerCase());
+  });
+  return {keywords,minBudget,maxBudget};
+}
+
+function doSearch(){
+  const q=document.getElementById('searchInput').value.trim();
+  appState.searchQuery = q;
+  const {keywords,minBudget,maxBudget}=parseSearchQuery(q);
+  appState.minBudget=minBudget;
+  appState.maxBudget=maxBudget;
+  
+  let list = appState.currentCategory==='all' ? [...appState.dishes] : appState.dishes.filter(d=>d.category===appState.currentCategory);
+  
+  if(keywords.length || minBudget!==null || maxBudget!==null){
+    list = list.filter(d=>{
+      const cost = calcDishCost(d);
+      if(minBudget!==null && cost<minBudget) return false;
+      if(maxBudget!==null && cost>maxBudget) return false;
+      if(keywords.length===0) return true;
+      const name = d.name.toLowerCase();
+      const materials = (d.materials||[]).map(m=>m.name.toLowerCase()).join(' ');
+      const tags = (d.tags||[]).map(t=>t.toLowerCase()).join(' ');
+      const allText = `${name} ${materials} ${tags}`;
+      return keywords.every(k=>allText.includes(k));
+    });
+  }
+  
+  document.getElementById('searchInfo').classList.remove('hidden');
+  document.getElementById('searchResultCount').textContent = list.length;
+  renderDishList(list);
+}
+
+function resetSearch(){
+  appState.searchQuery='';
+  appState.minBudget=null;
+  appState.maxBudget=null;
+  document.getElementById('searchInput').value='';
+  document.getElementById('searchInfo').classList.add('hidden');
+  renderDishes();
+}
+
+// ========== 渲染分类/菜品/已选栏 ==========
+function renderCategories(){
+  document.getElementById('categoryList').innerHTML=
+    `<li class="category-item px-5 py-3 cursor-pointer" data-category="all"><i class="fa fa-star mr-2"></i> 全部推荐</li>` +
+    appState.categories.map(c=>`<li class="category-item px-5 py-3 cursor-pointer" data-category="${c.id||c.name}"><i class="fa fa-bookmark mr-2"></i> ${c.name}</li>`).join('');
+  document.querySelectorAll('#mobileCategory .category-item:not([data-category="all"])').forEach(el=>el.remove());
+  appState.categories.forEach(c=>{
+    const li=document.createElement('li');
+    li.className='category-item px-4 py-2 cursor-pointer bg-white rounded-full flex-shrink-0';
+    li.dataset.category=c.id||c.name; li.textContent=c.name;
+    document.getElementById('mobileCategory').appendChild(li);
+  });
+  updateCategoryActive();
+}
+function updateCategoryActive(){
+  document.querySelectorAll('.category-item').forEach(el=>{
+    const active=el.dataset.category===appState.currentCategory;
+    el.classList.toggle('bg-primary/10',active); el.classList.toggle('text-primary',active);
+    el.classList.toggle('font-medium',active); el.classList.toggle('bg-white',!active);
+  });
+}
+function renderHeader(){
+  document.getElementById('familyName').textContent=appState.settings.familyName;
+  document.getElementById('header').style.backgroundImage=`url(${appState.settings.bgImage})`;
+}
+function renderDishList(list){
+  const g=document.getElementById('dishGrid'), e=document.getElementById('emptyTip');
+  if(!list.length){g.innerHTML='';e.classList.remove('hidden');return;}
+  e.classList.add('hidden');
+  g.innerHTML=list.map(d=>{
+    const cost=calcDishCost(d), sel=appState.selected.includes(d.id);
+    return `<div class="bg-white rounded-xl overflow-hidden shadow-sm">
+      <div class="h-36 overflow-hidden"><img src="${d.image}" class="w-full h-full object-cover" loading="lazy"></div>
+      <div class="p-4">
+        <div class="flex justify-between items-start mb-1">
+          <h3 class="text-lg font-bold">${d.name}</h3>
+          <div class="text-yellow-400 text-sm">${stars(d.stars||4)}</div>
+        </div>
+        <p class="text-gray-500 text-sm mb-2">${d.desc} · 预估 ¥${cost.toFixed(0)}</p>
+        ${(d.tags||[]).length?`<div class="mb-2">${d.tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div>`:''}
+        <div class="flex gap-2 mt-3">
+          <button class="flex-1 py-2 bg-primary/10 text-primary rounded-lg touch-btn text-sm" onclick="viewDish('${d.id}')">详情</button>
+          <button class="flex-1 py-2 ${sel?'bg-primary/90':'bg-primary'} text-white rounded-lg touch-btn text-sm" onclick="toggleSelectDish('${d.id}')">
+            <i class="fa ${sel?'fa-check':'fa-plus'}"></i> ${sel?'已选':'加入'}
+          </button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function renderDishes(){
+  let list=appState.currentCategory==='all'?[...appState.dishes]:appState.dishes.filter(d=>d.category===appState.currentCategory);
+  if(appState.searchQuery){
+    const {keywords,minBudget,maxBudget}=parseSearchQuery(appState.searchQuery);
+    if(keywords.length||minBudget!==null||maxBudget!==null){
+      list = list.filter(d=>{
+        const cost=calcDishCost(d);
+        if(minBudget!==null && cost<minBudget) return false;
+        if(maxBudget!==null && cost>maxBudget) return false;
+        if(keywords.length===0) return true;
+        const allText = `${d.name} ${(d.materials||[]).map(m=>m.name).join(' ')} ${(d.tags||[]).join(' ')}`.toLowerCase();
+        return keywords.every(k=>allText.includes(k));
+      });
+    }
+  }
+  renderDishList(list);
+}
+function renderSelectedBar(){
+  const b=document.getElementById('selectedBar'), c=appState.selected.length;
+  if(c){
+    b.classList.remove('translate-y-full');
+    document.getElementById('selectedCount').textContent=c;
+    document.getElementById('selectedList').textContent=appState.selected.map(id=>appState.dishes.find(d=>d.id===id)?.name||'').join('、');
+  }else b.classList.add('translate-y-full');
+}
+function switchCategory(cat){ appState.currentCategory=cat; updateCategoryActive(); resetSearch(); }
+function toggleSelectDish(id){
+  const i=appState.selected.indexOf(id);
+  i>-1?appState.selected.splice(i,1):appState.selected.push(id);
+  saveData(); renderDishes(); renderSelectedBar();
+}
+
+// ========== 查看菜品详情 ==========
+function viewDish(id){
+  const d=appState.dishes.find(x=>x.id===id); if(!d)return;
+  const cost=calcDishCost(d), sel=appState.selected.includes(d.id);
+  showModal(`<div class="relative">
+    <button class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 z-10 touch-btn" onclick="closeModal()"><i class="fa fa-times text-xl"></i></button>
+    <div class="h-48 overflow-hidden"><img src="${d.image}" class="w-full h-full object-cover"></div>
+    <div class="p-5">
+      <h2 class="text-xl font-bold mb-2">${d.name}</h2>
+      <div class="text-yellow-400 mb-2">${stars(d.stars||4)}</div>
+      <p class="text-gray-500 mb-3">${d.desc} · 预估 ¥${cost.toFixed(1)}</p>
+      ${(d.tags||[]).length?`<div class="mb-3">${d.tags.map(t=>`<span class="tag">${t}</span>`).join('')}</div>`:''}
+      <h4 class="font-bold mb-2">🥗 食材清单</h4>
+      <ul class="bg-gray-50 p-3 rounded-lg mb-4">
+        ${(d.materials||[]).map(m=>`<li class="py-1 flex justify-between border-b border-gray-100 last:border-0">
+          <span>${m.name} ${m.amount}</span>
+          <span class="text-gray-500">¥${(m.price||0).toFixed(1)}</span>
+        </li>`).join('')}
+        <li class="py-1 flex justify-between font-bold text-primary pt-2 mt-1">
+          <span>预估总成本</span>
+          <span>¥${cost.toFixed(1)}</span>
+        </li>
+      </ul>
+      <h4 class="font-bold mb-3">👩‍🍳 分步做法</h4>
+      <ol class="list-decimal list-inside space-y-2 text-gray-700 mb-4 pl-1">
+        ${(d.steps||[]).map(s=>`<li class="pb-1">${s.text}</li>`).join('')}
+      </ol>
+      <button class="w-full py-3 bg-primary text-white rounded-lg mt-2 touch-btn" onclick="toggleSelectDish('${d.id}');closeModal();">
+        <i class="fa ${sel?'fa-check':'fa-plus'} mr-1"></i> ${sel?'移出菜单':'加入菜单'}
+      </button>
+    </div>
+  </div>`);
+}
+
+// ========== 添加新菜品 ==========
+function addDish(){
+  const catOpts = appState.categories.map(c=>`<option value="${c.id||c.name}">${c.name}</option>`).join('');
+  showModal(`
+    <div class="p-5">
+      <div class="flex justify-between items-center mb-5"><h2 class="text-xl font-bold">添加新菜品</h2><button class="text-gray-400 hover:text-gray-600 touch-btn" onclick="closeModal()"><i class="fa fa-times text-xl"></i></button></div>
+      <div class="mb-4 p-3 bg-blue-50 rounded-lg">
+        <label class="block mb-2 font-medium">🔗 从文案一键智能解析</label>
+        <textarea id="importText" rows="3" class="w-full p-2 border rounded-lg mb-2" placeholder="粘贴抖音/小红书/菜谱文案，自动识别菜名、食材、数量、价格、步骤"></textarea>
+        <button type="button" id="parseBtn" class="px-4 py-1 bg-blue-500 text-white rounded text-sm touch-btn"><i class="fa fa-magic mr-1"></i> 智能解析填入</button>
+      </div>
+      <form id="dishForm" class="space-y-3">
+        <div><label class="block mb-1 font-medium">菜名 *</label><input type="text" id="dishName" required class="w-full p-2 border rounded-lg"></div>
+        <div class="grid grid-cols-2 gap-3">
+          <div><label class="block mb-1 font-medium">分类</label><select id="dishCat" class="w-full p-2 border rounded-lg">${catOpts}<option value="_new">➕ 新建分类</option></select></div>
+          <div><label class="block mb-1 font-medium">评分</label><select id="dishStars" class="w-full p-2 border rounded-lg">${[5,4,3,2,1].map(n=>`<option value="${n}" ${n===4?'selected':''}>${'⭐'.repeat(n)} ${n}星</option>`).join('')}</select></div>
+        </div>
+        <div id="newCatRow" class="hidden"><label class="block mb-1 font-medium">新分类名称</label><input type="text" id="newCatName" class="w-full p-2 border rounded-lg"></div>
+        <div><label class="block mb-1 font-medium">标签/电器（逗号分隔，如：烤箱、快手、下饭菜）</label><input type="text" id="dishTags" class="w-full p-2 border rounded-lg" placeholder="烤箱, 空气炸锅, 快手, 低脂"></div>
+        <div><label class="block mb-1 font-medium">简短描述</label><input type="text" id="dishDesc" class="w-full p-2 border rounded-lg"></div>
+        <div><label class="block mb-1 font-medium">食材（每行：名称 数量 单价）*</label><textarea id="dishMat" rows="4" class="w-full p-2 border rounded-lg" placeholder="例：鸡蛋 3个 6"></textarea></div>
+        <div><label class="block mb-1 font-medium">做法（每行一个步骤）*</label><textarea id="dishStep" rows="4" class="w-full p-2 border rounded-lg" placeholder="例：鸡蛋打散备用"></textarea></div>
+        <button type="submit" class="w-full py-3 bg-primary text-white rounded-lg touch-btn mt-2">✅ 保存菜品</button>
+      </form>
+    </div>
+  `);
+  document.getElementById('parseBtn').onclick=()=>{
+    const raw=document.getElementById('importText').value;
+    if(!raw.trim())return alert('请粘贴菜谱文案');
+    const res=parseRecipeText(raw);
+    document.getElementById('dishName').value=res.name;
+    document.getElementById('dishDesc').value=res.desc;
+    document.getElementById('dishMat').value=res.materials.map(m=>`${m.name} ${m.amount} ${m.price||0}`).join('\n');
+    document.getElementById('dishStep').value=res.steps.map(s=>s.text).join('\n');
+    alert('✅ 解析完成！核对后保存即可');
+  };
+  document.getElementById('dishCat').onchange=e=>{
+    document.getElementById('newCatRow').classList.toggle('hidden', e.target.value!=='_new');
+  };
+  document.getElementById('dishForm').onsubmit=e=>{
+    e.preventDefault();
+    const name=document.getElementById('dishName').value.trim();
+    if(!name)return alert('请输入菜名');
+    let cat=document.getElementById('dishCat').value;
+    if(cat==='_new'){
+      const newName=document.getElementById('newCatName').value.trim();
+      if(!newName)return alert('请输入新分类名称');
+      cat='cat_'+Date.now();
+      appState.categories.push({id:cat,name:newName});
+    }
+    const tags=document.getElementById('dishTags').value.split(/[,，、\s]+/).filter(Boolean);
+    const mat=document.getElementById('dishMat').value.trim().split('\n').map(line=>{
+      const p=line.trim().split(/\s+/);
+      const price=parseFloat(p.pop())||0;
+      const amount=/^[\d\.]+/.test(p[p.length-1])?p.pop():'适量';
+      return {name:p.join(' '),amount,price};
+    }).filter(x=>x.name);
+    const steps=document.getElementById('dishStep').value.trim().split('\n').map(s=>({text:s.trim()})).filter(x=>x.text);
+    if(!steps.length)return alert('请至少填写一个做法步骤');
+    appState.dishes.unshift({
+      id:'d'+Date.now(),name,category:cat,
+      desc:document.getElementById('dishDesc').value.trim()||'美味家常菜',
+      tags, materials:mat, steps,
+      stars:parseInt(document.getElementById('dishStars').value),
+      image:'https://picsum.photos/id/488/400/300',
+      creator:appState.settings.userName, createTime:Date.now()
+    });
+    saveData(); renderCategories(); renderDishes(); closeModal(); alert('✅ 添加成功！');
+  };
+}
+
+// ========== 查看采购清单 ==========
+function viewMenu(){
+  if(!appState.selected.length)return alert('请先选择菜品');
+  const sel=appState.selected.map(id=>appState.dishes.find(d=>d.id===id)).filter(Boolean);
+  const mats=[],total=sel.reduce((s,d)=>s+calcDishCost(d),0);
+  sel.forEach(d=>d.materials.forEach(m=>{
+    const e=mats.find(x=>x.name===m.name);
+    e?(e.amount+=`、${m.amount}`,e.price+=m.price||0):mats.push({...m});
+  }));
+  showModal(`
+    <div class="p-5">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-bold">📋 采购清单</h2>
+        <button onclick="closeModal()" class="text-gray-400 text-xl"><i class="fa fa-times"></i></button>
+      </div>
+      <div class="mb-4">
+        <h4 class="font-bold mb-2">已选菜品 (${sel.length}道)</h4>
+        ${sel.map(d=>`<div class="p-2 bg-gray-50 rounded mb-1">${d.name} · 预估 ¥${calcDishCost(d).toFixed(1)}</div>`).join('')}
+      </div>
+      <h4 class="font-bold mb-2">🛒 采购清单</h4>
+      <ul class="bg-gray-50 p-3 rounded mb-4">
+        ${mats.map(m=>`<li class="flex justify-between py-1 border-b border-gray-100 last:border-0">
+          <span>${m.name} ${m.amount}</span>
+          <span>¥${(m.price||0).toFixed(1)}</span>
+        </li>`).join('')}
+      </ul>
+      <div class="bg-primary/10 p-3 rounded-lg text-lg font-bold flex justify-between mb-4">
+        <span>预估总成本</span>
+        <span class="text-primary">¥${total.toFixed(1)}</span>
+      </div>
+      <button onclick="navigator.clipboard.writeText(document.body.innerText);alert('✅ 已复制清单文本')" class="w-full py-2 bg-gray-200 rounded-lg mb-2 touch-btn">
+        <i class="fa fa-copy mr-1"></i> 复制文本
+      </button>
+    </div>
+  `);
+}
+
+// ========== ✅ 共享餐桌（生成真实可用链接）==========
+function shareTable(){
+  let table = appState.tables.find(t=>t.id === appState.currentTableId);
+  if(!table){
+    table = {
+      id: 'table_'+Date.now()+'_'+Math.random().toString(36).slice(2,8),
+      name: appState.settings.familyName+'的餐桌',
+      selected: [...appState.selected],
+      createTime: Date.now()
+    };
+    appState.tables.push(table);
+    appState.currentTableId = table.id;
+    localStorage.setItem(STORAGE_KEYS.CURRENT_TABLE, table.id);
+  }
+  const baseUrl = window.location.href.split('#')[0];
+  const shareUrl = baseUrl + '#?table=' + encodeURIComponent(table.id);
+  showModal(`
+    <div class="p-5">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-bold">🔗 共享餐桌</h2>
+        <button onclick="closeModal()" class="text-gray-400 text-xl"><i class="fa fa-times"></i></button>
+      </div>
+      <div class="bg-blue-50 p-4 rounded-lg mb-4">
+        <p class="mb-2 text-sm font-medium">✅ 复制链接发给家人，<b>直接点开自动同步已选菜品</b>！</p>
+        <div class="bg-white p-3 rounded border text-xs break-all select-all mb-3" id="shareUrlBox">${shareUrl}</div>
+        <button onclick="navigator.clipboard.writeText(document.getElementById('shareUrlBox').value).then(()=>alert('✅ 链接已复制！直接发给家人即可同步'))" class="w-full py-2 bg-primary text-white rounded-lg touch-btn">
+          <i class="fa fa-copy mr-1"></i> 复制分享链接
+        </button>
+      </div>
+      <p class="text-sm text-gray-500">💡 任何人打开链接 → 自动读取你选的菜 → 各自添加/取消 → 实时同步</p>
+    </div>
+  `);
+}
+
+// ========== ✅ 打印全部菜谱卡 ==========
+function printAllDishes(){
+  if(!appState.dishes.length)return alert('暂无菜品可打印');
+  document.body.insertAdjacentHTML('beforeend',`<div id="printArea" class="p-4">
+    <h1 class="text-2xl font-bold text-center mb-6">${appState.settings.familyName} · 菜谱集</h1>
+    ${appState.dishes.map(d=>{
+      const cost=calcDishCost(d);
+      return `<div class="print-card">
+        <h2 class="text-xl font-bold mb-2">${d.name} ${stars(d.stars||4)}</h2>
+        <p class="text-gray-600 mb-3">${d.desc} · 预估 ¥${cost.toFixed(1)}</p>
+        ${(d.tags||[]).length?`<p class="mb-3">${d.tags.map(t=>`<span class="tag">${t}</span>`).join('')}</p>`:''}
+        <h4 class="font-bold mt-3 mb-2">🥗 食材</h4>
+        <ul class="mb-3">
+          ${d.materials.map(m=>`<li>${m.name} ${m.amount} — ¥${(m.price||0).toFixed(1)}</li>`).join('')}
+        </ul>
+        <p class="font-bold text-primary">总成本：¥${cost.toFixed(1)}</p>
+        <h4 class="font-bold mt-3 mb-2">👩‍🍳 做法</h4>
+        <ol class="list-decimal list-inside space-y-1">
+          ${d.steps.map(s=>`<li>${s.text}</li>`).join('')}
+        </ol>
+      </div>`;
+    }).join('')}
+  </div>`);
+  setTimeout(()=>{window.print();document.getElementById('printArea').remove();},300);
+}
+
+// ========== 备份/导出/导入 ==========
+function showBackup(){
+  showModal(`
+    <div class="p-5">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-bold">💾 数据管理</h2>
+        <button onclick="closeModal()" class="text-gray-400 text-xl"><i class="fa fa-times"></i></button>
+      </div>
+      <button onclick="exportData()" class="w-full py-3 bg-primary text-white rounded-lg mb-3 touch-btn">
+        <i class="fa fa-download mr-2"></i> 导出全部菜品
+      </button>
+      <div class="border-t pt-3">
+        <p class="text-sm mb-2">导入备份JSON文件：</p>
+        <input type="file" id="importFile" accept=".json" class="w-full mb-3">
+        <div class="flex gap-2">
+          <button onclick="importData(false)" class="flex-1 py-2 bg-accent text-white rounded-lg touch-btn">
+            <i class="fa fa-plus mr-1"></i> 合并导入
+          </button>
+          <button onclick="if(confirm('⚠️ 覆盖会清空现有数据，确定？')) importData(true)" class="flex-1 py-2 bg-red-500 text-white rounded-lg touch-btn">
+            <i class="fa fa-exclamation-triangle mr-1"></i> 覆盖导入
+          </button>
+        </div>
+      </div>
+    </div>
+  `);
+}
+function exportData(){
+  const backup={
+    version:'1.5', exportTime:new Date().toLocaleString(),
+    dishes:appState.dishes, categories:appState.categories, settings:appState.settings
+  };
+  const blob=new Blob([JSON.stringify(backup,null,2)],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`家庭菜单备份_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  alert('✅ 导出成功！');
+}
+function importData(overwrite){
+  const f=document.getElementById('importFile').files[0];
+  if(!f)return alert('请先选择备份文件');
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      const d=JSON.parse(e.target.result);
+      if(!d.dishes||!Array.isArray(d.dishes))return alert('文件格式不正确');
+      if(overwrite){
+        appState.dishes=d.dishes;
+        appState.categories=d.categories||defaultCats;
+        if(d.settings) appState.settings=d.settings;
+      }else{
+        let addCount=0;
+        d.dishes.forEach(newDish=>{
+          const exists=appState.dishes.some(x=>x.name.trim()===newDish.name.trim());
+          if(!exists){ appState.dishes.unshift(newDish); addCount++; }
+        });
+        d.categories?.forEach(cat=>{
+          if(!appState.categories.find(x=>(x.id||x.name)===(cat.id||cat.name))) appState.categories.push(cat);
+        });
+        alert(`✅ 合并成功！新增 ${addCount} 道菜`);
+      }
+      saveData(); renderCategories(); renderDishes(); renderHeader(); closeModal();
+      alert(`✅ 导入完成！共 ${appState.dishes.length} 道菜`);
+    }catch(err){alert('⚠️ 解析失败，请选择正确的备份文件');}
+  };
+  r.readAsText(f);
+}
+
+// ========== 设置 ==========
+function editHeader(){
+  showModal(`
+    <div class="p-5">
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-bold">个性化设置</h2>
+        <button onclick="closeModal()" class="text-gray-400 text-xl"><i class="fa fa-times"></i></button>
+      </div>
+      <div class="space-y-4">
+        <div><label class="block mb-2 font-medium">家庭名称</label>
+          <input type="text" id="fn" value="${appState.settings.familyName}" class="w-full p-2 border rounded-lg">
+        </div>
+        <button onclick="
+          appState.settings.familyName=document.getElementById('fn').value.trim()||'我家小厨房';
+          saveData(); renderHeader(); closeModal(); alert('✅ 已保存');
+        " class="w-full py-3 bg-primary text-white rounded-lg touch-btn">保存设置</button>
+      </div>
+    </div>
+  `);
+}
+
+// ========== 入口初始化 ==========
+document.addEventListener('DOMContentLoaded',()=>{
+  parseShareLink();
+  renderCategories(); renderHeader(); renderDishes(); renderSelectedBar();
+
+  // 分类切换
+  document.addEventListener('click',e=>{
+    const li=e.target.closest('.category-item');
+    if(li){ resetSearch(); switchCategory(li.dataset.category); }
+  });
+
+  // 绑定按钮事件
+  document.getElementById('editHeaderBtn').onclick=editHeader;
+  document.getElementById('backupBtn').onclick=showBackup;
+  document.getElementById('addDishBtn').onclick=addDish;
+  document.getElementById('mobileAddBtn').onclick=addDish;
+  document.getElementById('shareTableBtn').onclick=shareTable;
+  document.getElementById('mobileShareBtn').onclick=shareTable;
+  document.getElementById('viewMenuBtn').onclick=viewMenu;
+  document.getElementById('printAllBtn').onclick=printAllDishes;
+  document.getElementById('searchBtn').onclick=doSearch;
+  document.getElementById('searchInput').onkeydown=e=>{if(e.key==='Enter')doSearch();};
+  document.getElementById('resetSearchBtn').onclick=resetSearch;
+  document.getElementById('clearSearchLink').onclick=resetSearch;
+});
+</script>
+</body>
+</html>
